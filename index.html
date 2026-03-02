@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Firebase RTD - Edu Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .glass-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.2); }
+        .status-dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; }
+        .pulse-emerald { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); animation: pulse-emerald 2s infinite; }
+        .pulse-blue { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); animation: pulse-blue 2s infinite; }
+        @keyframes pulse-emerald { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+        @keyframes pulse-blue { 0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); } 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); } }
+        .sensor-chart-container { height: 160px; width: 100%; }
+        #logConsole::-webkit-scrollbar { width: 4px; }
+        #logConsole::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]:focus { outline: none; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 8px; cursor: pointer; background: #e2e8f0; border-radius: 4px; }
+        input[type=range]::-webkit-slider-thumb { height: 20px; width: 20px; border-radius: 50%; background: #6366f1; cursor: pointer; -webkit-appearance: none; margin-top: -6px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans text-slate-800">
+
+    <div class="max-w-7xl mx-auto p-4 md:p-6">
+        <header class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <h1 class="text-2xl font-black text-indigo-700 flex items-center gap-3 tracking-tight">
+                    <i class="fas fa-database"></i> IOT EDU DASHBOARD
+                </h1>
+                <p class="text-slate-400 text-sm">Update: Micro:bit Simple Logic for Students</p>
+            </div>
+            <div class="flex gap-2">
+                <button id="btnShowDocs" class="flex items-center gap-2 px-4 py-2 bg-indigo-100 text-indigo-700 rounded-xl shadow-sm text-xs font-bold uppercase hover:bg-indigo-200 transition">
+                    <i class="fas fa-book"></i> Panduan Siswa
+                </button>
+                <div id="connectionStatus" class="flex items-center gap-3 px-4 py-2 bg-white rounded-xl shadow-sm border border-slate-100 text-xs font-bold uppercase">
+                    <span class="status-dot bg-red-500" id="statusDot"></span>
+                    <span id="statusText">Terputus</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div class="lg:col-span-4 space-y-6">
+                <div class="glass-card rounded-2xl shadow-sm p-5 border border-blue-200">
+                    <h2 class="text-xs font-bold text-blue-500 uppercase mb-4 tracking-widest flex items-center justify-between">
+                        Koneksi Micro:bit
+                        <i class="fab fa-bluetooth text-blue-300 text-lg"></i>
+                    </h2>
+                    <div id="bleStatusContainer" class="flex items-center justify-between mb-4 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status BLE:</span>
+                        <div id="bleStatus" class="flex items-center gap-2 px-3 py-1 bg-slate-200 rounded-full text-[10px] font-bold text-slate-500 transition-all">
+                            <span class="status-dot bg-slate-400" id="bleStatusDot"></span> <span id="bleStatusText">Terputus</span>
+                        </div>
+                    </div>
+                    <button id="btnConnectBle" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2.5 rounded-xl transition text-xs shadow-lg shadow-blue-100 flex items-center justify-center gap-2">
+                        <i class="fab fa-bluetooth-b"></i> Hubungkan via Bluetooth
+                    </button>
+                </div>
+
+                <div class="glass-card rounded-2xl shadow-sm p-5 border border-slate-200">
+                    <h2 class="text-xs font-bold text-slate-400 uppercase mb-4 tracking-widest flex items-center justify-between">Firebase Config</h2>
+                    <div class="space-y-3">
+                        <input type="password" id="apiKey" class="w-full p-2.5 bg-slate-50 border rounded-xl text-xs outline-none" placeholder="API Key">
+                        <input type="text" id="dbUrl" class="w-full p-2.5 bg-slate-50 border rounded-xl text-xs outline-none" placeholder="Database URL">
+                        <input type="text" id="nodePath" class="w-full p-2.5 bg-slate-50 border rounded-xl text-xs outline-none" placeholder="Path (iot/test)">
+                        <button id="btnConnect" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl transition text-xs">Hubungkan Database</button>
+                    </div>
+                </div>
+
+                <div class="glass-card rounded-2xl shadow-sm p-5 border border-slate-200" id="builderCard">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xs font-bold text-emerald-600 uppercase tracking-widest" id="builderTitle">Builder Parameter</h2>
+                        <button id="btnResetForm" class="hidden text-[10px] text-rose-500 font-bold uppercase hover:underline">Batal Edit</button>
+                    </div>
+                    <div class="space-y-3">
+                        <input type="text" id="newKey" class="w-full p-2.5 bg-slate-50 border rounded-xl text-xs outline-none" placeholder="Nama Key (misal: motor)">
+                        <div class="grid grid-cols-2 gap-2">
+                            <select id="newType" class="w-full p-2.5 bg-slate-50 border rounded-xl text-xs outline-none">
+                                <option value="sensor">Sensor</option>
+                                <option value="dimmer">Dimmer (Analog)</option>
+                                <option value="switch">Switch (Digital)</option>
+                            </select>
+                            <input type="text" id="newUnit" class="w-full p-2.5 bg-slate-50 border rounded-xl text-xs outline-none" placeholder="Satuan">
+                        </div>
+                        <input type="number" id="newThreshold" class="w-full p-2.5 bg-slate-50 border rounded-xl text-xs outline-none" placeholder="Batas Atas (Default 100/1024)">
+                        <button id="btnAddPanel" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2.5 rounded-xl transition text-xs">Simpan Struktur</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-8 space-y-6">
+                <div>
+                    <h2 class="font-bold text-slate-600 mb-4 flex items-center gap-2 italic uppercase text-sm tracking-widest"><i class="fas fa-chart-area text-indigo-500"></i> Monitoring Telemetri</h2>
+                    <div id="sensorGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h2 class="font-bold text-slate-600 mb-4 flex items-center gap-2 italic text-xs uppercase tracking-widest"><i class="fas fa-toggle-on text-indigo-500"></i> Switch Digital (0/1)</h2>
+                        <div id="controlGrid" class="grid grid-cols-2 gap-3"></div>
+                    </div>
+                    <div>
+                        <h2 class="font-bold text-slate-600 mb-4 flex items-center gap-2 italic text-xs uppercase tracking-widest"><i class="fas fa-sliders text-indigo-500"></i> Analog Dimmer</h2>
+                        <div id="dimmerGrid" class="space-y-3"></div>
+                    </div>
+                </div>
+
+                <div class="glass-card rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="bg-slate-50 px-5 py-2 border-b flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        <span>Terminal Log</span><button id="btnClearLog" class="text-indigo-500 font-bold hover:underline">Hapus Log</button>
+                    </div>
+                    <div id="logConsole" class="bg-slate-900 p-4 h-32 overflow-y-auto font-mono text-[10px] text-emerald-400 leading-relaxed"><div>> Menunggu instruksi...</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="docsModal" class="modal flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-slide-up">
+            <div class="p-6 bg-indigo-600 text-white flex justify-between items-center">
+                <h2 class="text-xl font-bold italic"><i class="fas fa-book-open mr-2"></i> Panduan Program Siswa</h2>
+                <button id="btnCloseDocs" class="text-white hover:text-indigo-200"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <div class="p-6 overflow-y-auto max-h-[70vh]">
+                <div class="bg-blue-50 p-4 rounded-xl border border-blue-200 mb-4">
+                    <h3 class="text-sm font-black text-blue-600 uppercase mb-2">1. Menerima Perintah Web (RX)</h3>
+                    <p class="text-xs text-slate-600 mb-2">Susun blok MakeCode persis seperti logika di bawah ini. Ingat, gunakan blok <b>parse to number</b> untuk mengubah teks menjadi angka, dan blok <b>else if</b> agar komponen tidak saling mengganggu!</p>
+                    <pre class="bg-slate-900 text-emerald-400 p-3 rounded-lg text-[10px] overflow-x-auto">
+bluetooth.onUartDataReceived(serial.delimiters(Delimiters.NewLine), function () {
+    // 1. Baca NAMA komponen sampai ketemu KOMA (,)
+    nama = bluetooth.uartReadUntil(serial.delimiters(Delimiters.Comma))
+    
+    // 2. Baca ANGKA sampai ketemu ENTER (NewLine) lalu ubah jadi angka beneran
+    angka = parseFloat(bluetooth.uartReadUntil(serial.delimiters(Delimiters.NewLine)))
+    
+    // 3. Pisahkan kamarnya! Lampu masuk ke kamar lampu, Kipas masuk ke kamar kipas
+    if (nama == "lampu") {
+        // Karena switch bernilai 0 atau 1, langsung masuk pin Digital
+        pins.digitalWritePin(DigitalPin.P1, angka)
+    } else if (nama == "kipas") {
+        // Karena dimmer bernilai 0-1024, langsung masuk pin Analog
+        pins.analogWritePin(AnalogPin.P2, angka)
+    }
+})</pre>
+                </div>
+                <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
+                    <h3 class="text-sm font-black text-emerald-600 uppercase mb-2">2. Mengirim Sensor ke Web (TX)</h3>
+                    <p class="text-xs text-slate-600 mb-2">Web akan otomatis membaca data ini dan membuatkan panel grafik sensor secara otomatis!</p>
+                    <pre class="bg-slate-900 text-emerald-400 p-3 rounded-lg text-[10px] overflow-x-auto">
+basic.forever(function () {
+    // Akan otomatis menjadi key: "Sensor cahaya" di Firebase dan Web
+    bluetooth.uartWriteValue("Sensor cahaya", pins.analogReadPin(AnalogPin.P0))
+    basic.pause(500)
+})</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-6 right-6 transform translate-y-20 opacity-0 transition-all duration-500 pointer-events-none z-50">
+        <div class="bg-white text-slate-800 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 border-b-4 border-indigo-500">
+            <div id="toastIconContainer" class="p-2 bg-indigo-50 rounded-full"><i id="toastIcon" class="fas fa-info text-indigo-500"></i></div>
+            <p id="toastMsg" class="text-xs font-bold"></p>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp, getApps, deleteApp } from 'https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js';
+        import { getDatabase, ref, onValue, update, remove, set } from 'https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js';
+
+        let db = null; let currentPath = ""; let unsubscribe = null; let currentData = {}; let charts = {}; let editModeKey = null;
+
+        const el = {
+            apiKey: document.getElementById('apiKey'), dbUrl: document.getElementById('dbUrl'), nodePath: document.getElementById('nodePath'),
+            btnConnect: document.getElementById('btnConnect'), sensorGrid: document.getElementById('sensorGrid'), controlGrid: document.getElementById('controlGrid'),
+            dimmerGrid: document.getElementById('dimmerGrid'), logConsole: document.getElementById('logConsole'), statusDot: document.getElementById('statusDot'),
+            statusText: document.getElementById('statusText'), newKey: document.getElementById('newKey'), newType: document.getElementById('newType'),
+            newUnit: document.getElementById('newUnit'), newThreshold: document.getElementById('newThreshold'), btnAddPanel: document.getElementById('btnAddPanel'),
+            btnClearLog: document.getElementById('btnClearLog'), builderTitle: document.getElementById('builderTitle'), btnResetForm: document.getElementById('btnResetForm'),
+            btnConnectBle: document.getElementById('btnConnectBle'), bleStatus: document.getElementById('bleStatus'), bleStatusDot: document.getElementById('bleStatusDot'), bleStatusText: document.getElementById('bleStatusText'),
+            docsModal: document.getElementById('docsModal'), btnShowDocs: document.getElementById('btnShowDocs'), btnCloseDocs: document.getElementById('btnCloseDocs')
+        };
+
+        const UART_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+        const UART_TX_CHARACTERISTIC_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
+        const UART_RX_CHARACTERISTIC_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
+        let uBitDevice = null; let rxCharacteristic = null; let bleBuffer = "";
+
+        function formatName(key) { return key.replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' '); }
+
+        function attachDashboardListeners() {
+            const allGrids = [el.sensorGrid, el.controlGrid, el.dimmerGrid];
+            allGrids.forEach(grid => {
+                grid.addEventListener('click', async (e) => {
+                    const deleteBtn = e.target.closest('.btn-delete-action'); const editBtn = e.target.closest('.btn-edit-action');
+                    if (deleteBtn) {
+                        const key = deleteBtn.dataset.key;
+                        if (confirm(`Hapus parameter ${key}?`)) { try { if (charts[key]) { charts[key].destroy(); delete charts[key]; } await remove(ref(db, `${currentPath}/${key}`)); addLog(`Dihapus: ${key}`, 'warn'); } catch (err) { addLog(`Gagal Hapus: ${err.message}`, 'error'); } }
+                    }
+                    if (editBtn) {
+                        const key = editBtn.dataset.key; const item = currentData[key];
+                        if (item) { el.newKey.value = key; el.newKey.readOnly = true; el.newKey.classList.add('bg-slate-200'); el.newType.value = item.tipe || "sensor"; el.newUnit.value = item.satuan || ""; el.newThreshold.value = item.batas_atas || ""; editModeKey = key; el.builderTitle.innerText = "Edit Komponen"; el.btnResetForm.classList.remove('hidden'); el.btnAddPanel.innerText = "Perbarui Struktur"; el.btnAddPanel.classList.replace('bg-emerald-500', 'bg-indigo-500'); }
+                    }
+                });
+            });
+        }
+
+        function resetForm() { editModeKey = null; el.newKey.value = ""; el.newKey.readOnly = false; el.newKey.classList.remove('bg-slate-200'); el.newUnit.value = ""; el.newThreshold.value = ""; el.builderTitle.innerText = "Builder Parameter"; el.btnResetForm.classList.add('hidden'); el.btnAddPanel.innerText = "Simpan Struktur"; el.btnAddPanel.classList.replace('bg-indigo-500', 'bg-emerald-500'); }
+        el.btnResetForm.onclick = resetForm;
+
+        // --- Firebase Core ---
+        async function connect() {
+            const config = { apiKey: el.apiKey.value.trim(), databaseURL: el.dbUrl.value.trim(), projectId: el.dbUrl.value.split('//')[1]?.split('.')[0] || "project" };
+            currentPath = el.nodePath.value.trim();
+            if (!config.apiKey || !config.databaseURL || !currentPath) return showToast("Lengkapi data Firebase!", true);
+            try {
+                const apps = getApps(); if (apps.length > 0) await deleteApp(apps[0]); if (unsubscribe) unsubscribe();
+                const app = initializeApp(config); db = getDatabase(app);
+                addLog(`Sinkronisasi aktif: /${currentPath}`, 'info');
+                unsubscribe = onValue(ref(db, currentPath), (snapshot) => { const data = snapshot.val() || {}; currentData = data; renderDashboard(data); el.statusDot.className = "status-dot bg-emerald-500 pulse-emerald"; el.statusText.innerText = "Live Connected"; }, (err) => { addLog(`Error: ${err.message}`, 'error'); });
+                localStorage.setItem('iot_rtd_pro_structured_config_v2', JSON.stringify({...config, path: currentPath})); showToast("Terhubung!");
+            } catch (e) { addLog(`Error: ${e.message}`, 'error'); }
+        }
+
+        function renderDashboard(data) {
+            const keys = Object.keys(data).sort();
+            const sensorKeys = keys.filter(k => data[k].tipe === 'sensor'); const dimmerKeys = keys.filter(k => data[k].tipe === 'dimmer'); const switchKeys = keys.filter(k => data[k].tipe === 'switch');
+            if (keys.length === 0) { el.sensorGrid.innerHTML = `<div class="col-span-full py-20 text-slate-400 italic text-center">Data kosong. Tambahkan melalui Builder.</div>`; el.controlGrid.innerHTML = ""; el.dimmerGrid.innerHTML = ""; return; }
+            updateSensors(sensorKeys, data); updateSwitches(switchKeys, data); updateDimmers(dimmerKeys, data);
+        }
+
+        function updateSensors(keys, data) {
+            const container = el.sensorGrid; const existing = container.querySelectorAll('.sensor-card');
+            existing.forEach(c => { if (!keys.includes(c.dataset.key)) c.remove(); });
+            keys.forEach(key => {
+                let card = container.querySelector(`[data-key="${key}"]`); const item = data[key];
+                if (!card) {
+                    card = document.createElement('div'); card.className = "sensor-card glass-card p-5 rounded-2xl shadow-sm border transition-all relative group"; card.dataset.key = key;
+                    card.innerHTML = `<div class="flex justify-between items-start mb-2"><span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">${formatName(key)}</span><div class="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition"><button class="btn-edit-action text-slate-400 hover:text-indigo-500" data-key="${key}"><i class="fas fa-edit"></i></button><button class="btn-delete-action text-slate-400 hover:text-rose-500" data-key="${key}"><i class="fas fa-trash"></i></button></div></div><div class="flex items-baseline gap-1 mb-2"><h3 class="text-4xl font-black text-slate-800 value-display">${item.value ?? 0}</h3><span class="text-lg font-bold text-slate-400">${item.satuan || ''}</span></div><div class="sensor-chart-container"><canvas id="chart-${key}"></canvas></div>`;
+                    container.appendChild(card); initChart(key);
+                }
+                card.querySelector('.value-display').innerText = item.value ?? 0; updateChart(key, item.value ?? 0);
+            });
+        }
+
+        function updateSwitches(keys, data) {
+            el.controlGrid.innerHTML = "";
+            keys.forEach(key => {
+                const item = data[key]; const val = (item.value == 1 || item.value === true);
+                const card = document.createElement('div'); card.className = `glass-card p-4 rounded-2xl border flex flex-col items-center justify-center gap-2 relative group cursor-pointer ${val ? 'bg-indigo-600 border-indigo-600' : 'bg-white'}`;
+                card.innerHTML = `<div class="absolute top-1 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition"><button class="btn-edit-action text-[10px] text-slate-300 hover:text-white" data-key="${key}"><i class="fas fa-edit"></i></button><button class="btn-delete-action text-[10px] text-slate-300 hover:text-white" data-key="${key}"><i class="fas fa-trash"></i></button></div><div class="text-xl ${val ? 'text-white' : 'text-slate-400'} pointer-events-none"><i class="fas ${val ? 'fa-bolt' : 'fa-power-off'}"></i></div><span class="text-[10px] font-black uppercase tracking-widest ${val ? 'text-indigo-100' : 'text-slate-500'} pointer-events-none">${formatName(key)}</span>`;
+                card.onclick = (e) => { 
+                    if(!e.target.closest('button')) {
+                        const newVal = val ? 0 : 1; updateStructuredData(key, { value: newVal }, false); 
+                        sendDataToMicrobit(key, newVal); // Kirim via Bluetooth pakai trik koma
+                    } 
+                };
+                el.controlGrid.appendChild(card);
+            });
+        }
+
+        function updateDimmers(keys, data) {
+            el.dimmerGrid.innerHTML = "";
+            keys.forEach(key => {
+                const item = data[key]; const max = item.batas_atas || 1024;
+                const card = document.createElement('div'); card.className = "glass-card p-4 rounded-2xl border bg-white group relative";
+                card.innerHTML = `<div class="flex justify-between items-center mb-2"><span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">${formatName(key)}</span><div class="flex items-center gap-3"><div class="opacity-0 group-hover:opacity-100 transition flex gap-2 mr-2"><button class="btn-edit-action text-[10px] text-slate-300 hover:text-indigo-500" data-key="${key}"><i class="fas fa-edit"></i></button><button class="btn-delete-action text-[10px] text-slate-300 hover:text-rose-500" data-key="${key}"><i class="fas fa-trash"></i></button></div><span class="text-xs font-bold text-indigo-600">${item.value} <small class="text-[9px] opacity-50">/ ${max}</small></span></div></div><input type="range" min="0" max="${max}" value="${item.value}" class="dimmer-input" data-key="${key}">`;
+                const input = card.querySelector('input');
+                input.onchange = (e) => { 
+                    const newVal = parseInt(e.target.value); updateStructuredData(key, { value: newVal }, false);
+                    sendDataToMicrobit(key, newVal); // Kirim via Bluetooth pakai trik koma
+                };
+                el.dimmerGrid.appendChild(card);
+            });
+        }
+
+        function initChart(key) { const ctx = document.getElementById(`chart-${key}`).getContext('2d'); charts[key] = new Chart(ctx, { type: 'line', data: { labels: Array(25).fill(''), datasets: [{ data: Array(25).fill(null), borderColor: '#6366f1', borderWidth: 2, pointRadius: 2, backgroundColor: 'rgba(99, 102, 241, 0.05)', fill: true, tension: 0.3 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: true } } } }); }
+        function updateChart(key, val) { if (!charts[key]) return; charts[key].data.datasets[0].data.push(val); charts[key].data.datasets[0].data.shift(); charts[key].update('none'); }
+
+        async function updateStructuredData(key, payload, silent = false) {
+            if (!db) return; try { await update(ref(db, `${currentPath}/${key}`), payload); if (!silent) addLog(`Update ${key}: ${JSON.stringify(payload)}`, 'success'); } catch (e) { addLog(`Error: ${e.message}`, 'error'); }
+        }
+
+        el.btnAddPanel.onclick = async () => {
+            const key = el.newKey.value.trim().replace(/\s+/g, '_').toLowerCase(); if (!key) return showToast("Nama Key wajib diisi!", true);
+            const structuredItem = { tipe: el.newType.value, satuan: el.newUnit.value.trim(), batas_atas: parseInt(el.newThreshold.value) || (el.newType.value === 'dimmer'? 1024 : 100), value: editModeKey ? currentData[editModeKey].value : 0 };
+            try { await set(ref(db, `${currentPath}/${key}`), structuredItem); addLog(`Simpan: ${key}`, 'info'); resetForm(); showToast("Berhasil!"); } catch (e) { addLog(`Gagal Simpan: ${e.message}`, 'error'); }
+        };
+
+        // ==========================================
+        // --- WEB BLUETOOTH API ---
+        // ==========================================
+        function updateUIConnectState(isConnected) {
+            if (isConnected) { el.bleStatus.className = "flex items-center gap-2 px-3 py-1 bg-blue-50 rounded-full text-[10px] font-bold text-blue-600 transition-all"; el.bleStatusDot.className = "status-dot bg-blue-500 pulse-blue"; el.bleStatusText.innerText = "Terhubung"; el.btnConnectBle.innerHTML = '<i class="fas fa-times"></i> Putuskan Micro:bit'; el.btnConnectBle.classList.replace('bg-blue-500', 'bg-rose-500'); } 
+            else { el.bleStatus.className = "flex items-center gap-2 px-3 py-1 bg-slate-200 rounded-full text-[10px] font-bold text-slate-500 transition-all"; el.bleStatusDot.className = "status-dot bg-slate-400"; el.bleStatusDot.style.animation = "none"; el.bleStatusText.innerText = "Terputus"; el.btnConnectBle.innerHTML = '<i class="fab fa-bluetooth-b"></i> Hubungkan via Bluetooth'; el.btnConnectBle.classList.replace('bg-rose-500', 'bg-blue-500'); }
+        }
+
+        async function connectButtonPressed() {
+            if (!navigator.bluetooth) { showToast("Browser tidak mendukung Web Bluetooth!", true); return; }
+            try {
+                addLog("Mencari Micro:bit...", "info");
+                uBitDevice = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: "BBC micro:bit" }], optionalServices: [UART_SERVICE_UUID] });
+                uBitDevice.addEventListener('gattserverdisconnected', disconnectButtonPressed);
+                const server = await uBitDevice.gatt.connect(); const service = await server.getPrimaryService(UART_SERVICE_UUID);
+                const txCharacteristic = await service.getCharacteristic(UART_TX_CHARACTERISTIC_UUID); await txCharacteristic.startNotifications(); txCharacteristic.addEventListener("characteristicvaluechanged", onTxCharacteristicValueChanged);
+                rxCharacteristic = await service.getCharacteristic(UART_RX_CHARACTERISTIC_UUID);
+                addLog("Micro:bit Connected!", "success"); showToast("Micro:bit Terhubung!"); updateUIConnectState(true);
+            } catch (error) { addLog("BLE Error: " + error.message, "error"); updateUIConnectState(false); }
+        }
+
+        function disconnectButtonPressed() { if (uBitDevice && uBitDevice.gatt.connected) uBitDevice.gatt.disconnect(); addLog("Micro:bit Disconnected", "warn"); showToast("Micro:bit Terputus", true); updateUIConnectState(false); rxCharacteristic = null; }
+
+        // MENGIRIM DENGAN TRIK KOMA (COCOK UNTUK SISWA)
+        async function sendDataToMicrobit(key, value) {
+            if (!rxCharacteristic) { addLog("BLE TX Gagal: Micro:bit tidak terhubung", "error"); return; }
+            try {
+                let encoder = new TextEncoder();
+                // Format langsung: nama_key,nilai\n (misal: motor,512\n atau lampu,1\n)
+                let textToSend = `${key},${value}\n`;
+                await rxCharacteristic.writeValue(encoder.encode(textToSend));
+                addLog(`[BLE TX] Mengirim: ${textToSend.trim()}`, "info");
+            } catch (error) { addLog(`[BLE TX] Error: ${error.message}`, "error"); }
+        }
+
+        function onTxCharacteristicValueChanged(event) {
+            let receivedData = []; for (var i = 0; i < event.target.value.byteLength; i++) { receivedData[i] = event.target.value.getUint8(i); }
+            bleBuffer += String.fromCharCode.apply(null, receivedData);
+            const lines = bleBuffer.split('\n'); bleBuffer = lines.pop(); 
+            lines.forEach(line => { const cleanLine = line.trim(); if (cleanLine) processMicrobitData(cleanLine); });
+        }
+
+        function processMicrobitData(dataStr) {
+            addLog(`[BLE RX] Menerima: ${dataStr}`, "info"); if (!db) return;
+            if (dataStr.includes(':')) {
+                const parts = dataStr.split(':'); const key = parts[0].trim().replace(/\s+/g, '_').toLowerCase(); const val = parseFloat(parts[1].trim());
+                if (!isNaN(val)) {
+                    if (currentData[key]) { updateStructuredData(key, { value: val }, true); } 
+                    else { updateStructuredData(key, { tipe: "sensor", value: val, satuan: "", batas_atas: 1024 }, false); addLog(`Sensor Baru: ${key}`, "success"); }
+                }
+            }
+        }
+
+        el.btnConnectBle.onclick = () => { if (uBitDevice && uBitDevice.gatt.connected) disconnectButtonPressed(); else connectButtonPressed(); };
+        el.btnConnect.onclick = connect; el.btnClearLog.onclick = () => el.logConsole.innerHTML = "<div>> Log dibersihkan.</div>";
+        el.btnShowDocs.onclick = () => el.docsModal.style.display = 'flex'; el.btnCloseDocs.onclick = () => el.docsModal.style.display = 'none'; window.onclick = (e) => { if (e.target == el.docsModal) el.docsModal.style.display = 'none'; };
+
+        function addLog(msg, type = 'info') { const time = new Date().toLocaleTimeString(); const div = document.createElement('div'); let color = 'text-slate-400'; if (type === 'success') color = 'text-emerald-400'; if (type === 'error') color = 'text-rose-400'; if (type === 'warn') color = 'text-amber-400'; div.className = color; div.innerHTML = `<span class="opacity-40">[${time}]</span> ${msg}`; el.logConsole.appendChild(div); el.logConsole.scrollTop = el.logConsole.scrollHeight; }
+        function showToast(msg, isError = false) { const t = document.getElementById('toast'); document.getElementById('toastMsg').innerText = msg; document.getElementById('toastIcon').className = isError ? 'fas fa-times text-rose-500' : 'fas fa-check text-indigo-500'; t.classList.remove('translate-y-20', 'opacity-0'); setTimeout(() => t.classList.add('translate-y-20', 'opacity-0'), 3000); }
+
+        const saved = JSON.parse(localStorage.getItem('iot_rtd_pro_structured_config_v2') || '{}');
+        if (saved.apiKey) { el.apiKey.value = saved.apiKey; el.dbUrl.value = saved.databaseURL; el.nodePath.value = saved.path || "iot/test"; }
+        attachDashboardListeners();
+    </script>
+</body>
+</html>
